@@ -7,11 +7,6 @@ var Discord = require("discord.js");
 
 // Constants
 const MESSAGE_REGEX = /{(.*?)}/g
-const SERVER_LIMITS = {
-	"87400833968254976": [
-		"176709073566302208",
-	],
-}
 
 var config = {};
 
@@ -29,10 +24,12 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 	bot.on("message", function(message) {
 		var serverId = message.channel.server.id;
 		var channelId = message.channel.id
-		if (serverId in SERVER_LIMITS) {
-			var channels = SERVER_LIMITS[serverId];
-			if (channels.indexOf(channelId) == -1) {
-				return;
+		if (config.server_limits) {
+			if (serverId in config.server_limits) {
+				var channels = config.server_limits[serverId];
+				if (channels.indexOf(channelId) == -1) {
+					return;
+				}
 			}
 		}
 		
