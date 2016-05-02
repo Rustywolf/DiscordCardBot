@@ -45,7 +45,7 @@ function search(name, limit, callback) {
 	request(SEARCH + encodeURIComponent(name) + SEARCH_LIMIT + encodeURIComponent(limit), function(res) {
 		var data = JSON.parse(res);
 		var sequenceMatcher = new difflib.SequenceMatcher(null, "", "");
-		sequenceMatcher.setSeq2(name);
+		sequenceMatcher.setSeq2(name.toLowerCase());
 		
 		data.items.some(function(item) {
 			if(IGNORE_REGEX.test(item.title)) {
@@ -56,7 +56,7 @@ function search(name, limit, callback) {
 				return false;
 			}
 			
-			sequenceMatcher.setSeq1(item.title);
+			sequenceMatcher.setSeq1(item.title.toLowerCase());
 			if (sequenceMatcher.ratio() < MATCH_RATIO) {
 				if (global.config.debug) {
 					console.log("Failed match: " + name + " --> " + item.title);
