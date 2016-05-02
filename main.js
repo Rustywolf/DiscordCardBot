@@ -49,5 +49,9 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 		});
 	});
 
-	bot.login(config.login.email, config.login.password);
+	if (config.login.token) {
+		bot.loginWithToken(config.login.token);
+	} else {
+		bot.login(config.login.email, config.login.password);
+	}
 });
