@@ -1,0 +1,10 @@
+{
+  "name": "DNDiscordBot",
+  "version": "1.0.0",
+  "main": "main.js",
+  "dependencies": {
+    "difflib": "0.2.4",
+    "discord.js": "7.0.1",
+    "jsdom": "8.5.0"
+  }
+}
