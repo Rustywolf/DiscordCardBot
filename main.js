@@ -8,7 +8,7 @@ var Discord = require("discord.js");
 // Constants
 const MESSAGE_REGEX = /{(.*?)}/g
 
-var config = {};
+var config = global.config = {};
 
 // Main
 fs.readFile("./config.json", "utf8", function(err, data) {
@@ -17,7 +17,7 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 		return;
 	}
 	
-	config = JSON.parse(data);
+	config = global.config = JSON.parse(data);
 
 	var bot = new Discord.Client();
 

@@ -1,0 +1,12 @@
+{
+	"login": {
+		"token": "TOKEN_GOES_HERE"
+	},
+	"server_limits": {
+		"SERVER_ID": [
+			"CHANNEL_ID"
+		]
+	},
+	
+	"debug": "false"
+}

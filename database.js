@@ -49,13 +49,19 @@ function search(name, limit, callback) {
 		
 		data.items.some(function(item) {
 			if(IGNORE_REGEX.test(item.title)) {
-				console.log("Failed test: " + name + " --> " + item.title);
+				if (global.config.debug) {
+					console.log("Failed test: " + name + " --> " + item.title);
+				}
+				
 				return false;
 			}
 			
 			sequenceMatcher.setSeq1(item.title);
 			if (sequenceMatcher.ratio() < MATCH_RATIO) {
-				console.log("Failed match: " + name + " --> " + item.title);
+				if (global.config.debug) {
+					console.log("Failed match: " + name + " --> " + item.title);
+				}
+				
 				return false;
 			}
 			
