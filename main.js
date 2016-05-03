@@ -3,14 +3,15 @@ var database = require('./database.js');
 var fs = require('fs');
 
 // 'Class' imports
-var Discord = require("discord.js");
+var Discord = require('discord.js');
+var Response = require('./response.js')
 
 // Constants
 const MESSAGE_REGEX = /{(.*?)}/g
 
+// Main
 var config = global.config = {};
 
-// Main
 fs.readFile("./config.json", "utf8", function(err, data) {
 	if (err) {
 		console.log(err.message);
@@ -18,16 +19,27 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 	}
 	
 	config = global.config = JSON.parse(data);
-
+	
 	var bot = new Discord.Client();
 
 	bot.on("message", function(message) {
+		if (!config.allow_pm && !message.channel.server) {
+			if (config.debug) {
+				console.log("Received PM, ignoring...");
+			}
+			
+			return;
+		}
+		
 		if (config.server_limits && message.channel.server) {
 			var serverId = message.channel.server.id;
 			var channelId = message.channel.id
 			if (serverId in config.server_limits) {
 				var channels = config.server_limits[serverId];
 				if (channels.indexOf(channelId) == -1) {
+					if (config.debug) {
+						console.log("Receieved messge channel #" + channelId + ", ignoring...");
+					}
 					return;
 				}
 			}
@@ -40,7 +52,15 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 			results.push(result);
 		}
 		
+		if (results.length > config.card_limit_per_message) {
+			bot.reply(message, "Nyeh? are ya tryin' to kill me? (" + config.card_limit_per_message + " cards per message)");
+			return;
+		}
+		
 		var searches = [];
+		var response = new Response(function(text) {
+			bot.reply(message, text);
+		}, results.length);
 		
 		results.forEach(function(val) {
 			var cardName = val[1];
@@ -49,10 +69,10 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 			}
 			
 			searches.push(cardName);
-			
+		
 			console.log("Processing: " + cardName);
 			database.lookup(cardName, function(card) {
-				bot.reply(message, card.format());
+				response.handle(card);
 			});
 		});
 	});

@@ -92,6 +92,10 @@ function parseCardData(url, callback) {
 			var table = $('.cardtable');
 			
 			if (!table.length) {
+				if (global.config.debug) {
+					console.log("No cardtable found for page: " + url);
+				}
+				
 				return;
 			}
 			
