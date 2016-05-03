@@ -33,7 +33,7 @@ exports.prototype.parse = function(key, value) {
 		case "Level":
 		case "Rank":
 		case "Materials":
-		case "Scale":
+		case "Pendulum Scale":
 		case "Property":
 			if (key == "Types") {
 				key = "Type";
