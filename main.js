@@ -22,9 +22,9 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 	var bot = new Discord.Client();
 
 	bot.on("message", function(message) {
-		var serverId = message.channel.server.id;
-		var channelId = message.channel.id
-		if (config.server_limits) {
+		if (config.server_limits && message.channel.server) {
+			var serverId = message.channel.server.id;
+			var channelId = message.channel.id
 			if (serverId in config.server_limits) {
 				var channels = config.server_limits[serverId];
 				if (channels.indexOf(channelId) == -1) {
