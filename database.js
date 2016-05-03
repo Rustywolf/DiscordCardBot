@@ -47,6 +47,10 @@ function search(name, limit, callback) {
 		var sequenceMatcher = new difflib.SequenceMatcher(null, "", "");
 		sequenceMatcher.setSeq2(name.toLowerCase());
 		
+		if(!data.items) {
+			return;
+		}
+		
 		data.items.some(function(item) {
 			if(IGNORE_REGEX.test(item.title)) {
 				if (global.config.debug) {
