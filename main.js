@@ -44,7 +44,7 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 		
 		results.forEach(function(val) {
 			var cardName = val[1];
-			if (searches.indexOf(cardNames) != -1) {
+			if (searches.indexOf(cardName) != -1) {
 				return;
 			}
 			
