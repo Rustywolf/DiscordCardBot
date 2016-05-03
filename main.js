@@ -40,8 +40,16 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 			results.push(result);
 		}
 		
+		var searches = [];
+		
 		results.forEach(function(val) {
 			var cardName = val[1];
+			if (searches.indexOf(cardNames) != -1) {
+				return;
+			}
+			
+			searches.push(cardName);
+			
 			console.log("Processing: " + cardName);
 			database.lookup(cardName, function(card) {
 				bot.reply(message, card.format());
