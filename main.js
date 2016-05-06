@@ -20,7 +20,9 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 	
 	config = global.config = JSON.parse(data);
 	
-	var bot = new Discord.Client();
+	var bot = new Discord.Client({
+		autoReconnect: true
+	});
 
 	bot.on("message", function(message) {
 		if (!config.allow_pm && !message.channel.server) {
