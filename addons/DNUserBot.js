@@ -49,7 +49,6 @@ function login(username, password, callback) {
 
 exports.onLoad = function() {
 	login(global.config.dn.username, global.config.dn.password, function(body) {
-		console.log(body);
 		var response = body.split(",");
 		var client = new DNUser(response[1], response[2]);
 		global.bot.on("message", function(message) {
@@ -189,15 +188,12 @@ function DNUser(username, session) {
 					break;
 					
 				case 'Offline users':
-					for (var i = 1; i < args.length; i += 2) {
+					for (var i = 1; i < args.length; i++) {
 						var name = args[i];
-						var rank = args[i+1];
 						
-						if (rank > 0) {
-							var indexOf = user.onlineAdmins.indexOf(name);
-							if (indexOf != -1) {
-								user.onlineAdmins.splice(indexOf, 1);
-							}
+						var indexOf = user.onlineAdmins.indexOf(name);
+						if (indexOf != -1) {
+							user.onlineAdmins.splice(indexOf, 1);
 						}
 						
 						this.onlineUsers--;
