@@ -11,6 +11,8 @@ const MESSAGE_REGEX = /{(.*?)}/g
 
 // Main
 var config = global.config = {};
+var addons = global.addons = {};
+var bot = global.bot = {};
 
 fs.readFile("./config.json", "utf8", function(err, data) {
 	if (err) {
@@ -20,7 +22,7 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 	
 	config = global.config = JSON.parse(data);
 	
-	var bot = new Discord.Client({
+	bot = global.bot = new Discord.Client({
 		autoReconnect: true
 	});
 
@@ -78,6 +80,21 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 			});
 		});
 	});
+	
+	if (config.addons && config.addons.length > 0) {
+		var addonsArray = [];
+		config.addons.forEach(function(addon) { 
+			var addonObj = require("./addons/" + addon + ".js");
+			addons[addon] = addonObj;
+			addonsArray.push(addonObj);
+		});
+		
+		addonsArray.forEach(function(addon) {
+			if (typeof addon.onLoad == "function") {
+				addon.onLoad();
+			}
+		});
+	}
 
 	if (config.login.token) {
 		bot.loginWithToken(config.login.token);

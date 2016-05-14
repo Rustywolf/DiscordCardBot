@@ -10,5 +10,9 @@
 	
 	"debug": false,
 	"allow_pm": false,
-	"card_limit_per_message": 5
+	"card_limit_per_message": 5,
+	
+	"addons": [
+		
+	]
 }
