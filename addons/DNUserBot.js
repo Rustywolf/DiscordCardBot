@@ -1,5 +1,6 @@
 var exports = module.exports = {};
 
+var url = require('url');
 var net = require('net');
 var http = require('http');
 
@@ -47,37 +48,102 @@ function login(username, password, callback) {
 	req.end();
 }
 
+// https://gist.github.com/CatTail/4174511
+var decodeHtmlEntity = function(str) {
+  return str.replace(/&#(\d+);/g, function(match, dec) {
+    return String.fromCharCode(dec);
+  });
+};
+
+var regex = /<body>\n\n(.*?)\n<\/body>/gi;
+function parseList(body) {
+	var ret = regex.exec(body)[1];
+	ret = ret.replace(/<br \/>/g, "\n");
+	ret = decodeHtmlEntity(ret);
+	ret = ret.replace(/^\s+|\s+$/g, "");
+	
+	regex.lastIndex = 0;
+	return ret;
+}
+
 exports.onLoad = function() {
-	login(global.config.dn.username, global.config.dn.password, function(body) {
-		var response = body.split(",");
-		var client = new DNUser(response[1], response[2]);
-		global.bot.on("message", function(message) {
-			if (message.channel.id == global.config.dn.channel) {
-				if (message.content == "!online") {
-					var msg = "\n**Admins Online:** " + client.onlineAdmins.length;
-					if (client.onlineAdmins.length > 0) {
-						msg += " (";
-						client.onlineAdmins.forEach(function(admin) {
-							msg += admin + ", ";
-						});
+	var adminOptions = url.parse(global.config.dn.admins);
+	adminOptions.port = 80;
+	
+	http.get(adminOptions, function(res) {
+		res.setEncoding('utf8');
+		
+		var body = '';
+		
+		res.on('data', function(chunk) {
+			body += chunk;
+		}).on('end', function() {
+			var admins = parseList(body).split("\n");
+			
+			login(global.config.dn.username, global.config.dn.password, function(body) {
+				var response = body.split(",");
+				var client = new DNUser(response[1], response[2], admins);
+				console.log("Connected to DN");
+				
+				global.bot.on("message", function(message) {
+					if (message.channel.id == global.config.dn.channel) {
+						if (message.content == null || message.content == "") return;
+						var args = message.content.split(" ");
 						
-						msg = msg.substring(0, msg.length - 2);
-						msg += ")";
+						if (args[0] == "!online") {
+							var msg = "\n**Admins Online:** " + client.onlineAdmins.length;
+							if (client.onlineAdmins.length > 0) {
+								msg += " (";
+								client.onlineAdmins.forEach(function(admin) {
+									msg += admin + ", ";
+								});
+								
+								msg = msg.substring(0, msg.length - 2);
+								msg += ")";
+							}
+							
+							msg += "\n";
+							msg += "**Admins Offduty:** " + client.offdutyAdmins.length;
+							if (client.offdutyAdmins.length > 0) {
+								msg += " (";
+								client.offdutyAdmins.forEach(function(admin) {
+									msg += admin + ", ";
+								});
+								
+								msg = msg.substring(0, msg.length - 2);
+								msg += ")";
+							}
+							
+							msg += "\n";
+							msg += "**Users Online:** " + client.onlineUsers;
+							
+							bot.reply(message, msg);
+							
+						} else if (args[0] == "!profile" && args.length > 1) {
+							var requester = message.author;
+							var user = args.join(" ").substring(9).toLowerCase();
+							if (user == null || user == "") return;
+							
+							client.send(["Get profile", user]);
+							
+							if (client.profileRequests[user] == undefined) {
+								client.profileRequests[user] = [];
+							}
+							
+							client.profileRequests[user].push(requester);
+						}
 					}
-					
-					msg += "\n";
-					msg += "**Users Online:** " + client.onlineUsers;
-					
-					bot.reply(message, msg);
-				}
-			}
+				});
+			});
+		}).on('error', function (err) {
+			console.log("Error: " + err.message);
 		});
 	});
 }
 
 const DN_VERSION = "Connect23";
 
-function DNUser(username, session) {
+function DNUser(username, session, admins) {
 	var user = this;
 	
 	this.username = username;
@@ -85,9 +151,12 @@ function DNUser(username, session) {
 	this.clientSession = randomHex(32);
 	this.client = {};
 	this.heartbeat = -1;
+	this.allAdmins = admins;
 	
+	this.profileRequests = {};
 	this.onlineUsers = 0;
 	this.onlineAdmins = [];
+	this.offdutyAdmins = [];
 	
 	this.send = function(args) {
 		var string = args.join(",");
@@ -185,6 +254,8 @@ function DNUser(username, session) {
 						
 						if (rank > 0) {
 							user.onlineAdmins.push(name);
+						} else if (user.allAdmins.indexOf(name) != -1) {
+							this.offdutyAdmins.push(name);
 						}
 						
 						this.onlineUsers++;
@@ -201,9 +272,38 @@ function DNUser(username, session) {
 							user.onlineAdmins.splice(indexOf, 1);
 						}
 						
+						indexOf = user.offdutyAdmins.indexOf(name);
+						if (indexOf != -1) {
+							user.offdutyAdmins.splice(indexOf, 1);
+						}
+						
 						this.onlineUsers--;
 					}
 					
+					break;
+					
+				case 'Get profile':
+					var profile = new UserProfile(args);
+					if (this.profileRequests[profile.username.toLowerCase()] != undefined) {
+						var msg = "";
+						this.profileRequests[profile.username.toLowerCase()].forEach(function(requester) {
+							msg += requester.mention() + ", ";
+						});
+						
+						msg = msg.substring(0, msg.length - 2);
+						msg += "\n";
+						msg += "**Username:** " + profile.username + "\n";
+						msg += "**Match Results:** " + profile.matchesWins + "/" + profile.matchesLoses + "/" + profile.matchesDraws + " (**Rating:** " + profile.matchesRating + ")\n";
+						msg += "**Singles Results:** " + profile.singlesWins + "/" + profile.singlesLoses + "/" + profile.singlesDraws + " (**Rating:** " + profile.singlesRating + ")\n";
+						
+						var date = new Date(Date.now() - profile.dateCreated*1000);
+						msg += "**Registered:** ";
+						msg += ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getUTCMonth()] + " " + date.getDate() + ", " + date.getFullYear();
+						
+						global.bot.sendMessage(global.config.dn.channel, msg);
+						
+						delete this.profileRequests[profile.username.toLowerCase()];
+					}
 					break;
 			}
 		}
@@ -215,4 +315,23 @@ function DNUser(username, session) {
 	}
 	
 	this.connect();
+}
+
+function UserProfile(data) {
+	this.username = data[1];
+	this.avatar = data[2];
+	this.online = data[3];
+	this.lastOnline = data[4];
+	this.dateCreated = data[5];
+	this.singlesRating = data[6];
+	this.matchesRating = data[7];
+	this.singlesWins = data[8];
+	this.matchesWins = data[9];
+	this.singlesLoses = data[10];
+	this.matchesLoses = data[11];
+	this.singlesDraws = data[12];
+	this.matchesDraws = data[13];
+	this.description = data[14];
+	this.inDuel = data[15];
+	this.donator = data[16];
 }
