@@ -133,6 +133,11 @@ function DNUser(username, session) {
 		this.client.on('error', function(err) {
 			console.log("Socket Error: " + err.message);
 		});
+		
+		this.client.on('close', function() {
+			clearInterval(user.heartbeat);
+			user.connect();
+		});
 	}
 	
 	function splitArgs(message) {
