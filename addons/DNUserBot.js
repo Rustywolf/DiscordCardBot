@@ -91,46 +91,72 @@ exports.onLoad = function() {
 						var args = message.content.split(" ");
 						
 						if (args[0] == "!online") {
-							var msg = "\n**Admins Online:** " + client.onlineAdmins.length;
-							if (client.onlineAdmins.length > 0) {
-								msg += " (";
-								client.onlineAdmins.forEach(function(admin) {
-									msg += admin + ", ";
-								});
+							var callback = function() {
+								var msg = "\n**Admins Online:** " + client.onlineAdmins.length;
+								if (client.onlineAdmins.length > 0) {
+									msg += " (";
+									client.onlineAdmins.forEach(function(admin) {
+										msg += admin + ", ";
+									});
+									
+									msg = msg.substring(0, msg.length - 2);
+									msg += ")";
+								}
 								
-								msg = msg.substring(0, msg.length - 2);
-								msg += ")";
+								msg += "\n";
+								msg += "**Admins Offduty:** " + client.offdutyAdmins.length;
+								if (client.offdutyAdmins.length > 0) {
+									msg += " (";
+									client.offdutyAdmins.forEach(function(admin) {
+										msg += admin + ", ";
+									});
+									
+									msg = msg.substring(0, msg.length - 2);
+									msg += ")";
+								}
+								
+								msg += "\n";
+								msg += "**Users Online:** " + client.onlineUsers;
+								
+								bot.reply(message, msg);
 							}
 							
-							msg += "\n";
-							msg += "**Admins Offduty:** " + client.offdutyAdmins.length;
-							if (client.offdutyAdmins.length > 0) {
-								msg += " (";
-								client.offdutyAdmins.forEach(function(admin) {
-									msg += admin + ", ";
-								});
+							if (client.accountHandler.state == DNStates.LOGGED_IN) {
+								client.onHasUsers(callback);
+							} else {
+								if (client.accountHandler.state == DNStates.LOGGED_OUT) {
+									client.connect();
+								}
 								
-								msg = msg.substring(0, msg.length - 2);
-								msg += ")";
+								client.accountHandler.onLogin(function() {
+									client.onHasUsers(callback);
+								});
 							}
-							
-							msg += "\n";
-							msg += "**Users Online:** " + client.onlineUsers;
-							
-							bot.reply(message, msg);
 							
 						} else if (args[0] == "!profile" && args.length > 1) {
 							var requester = message.author;
 							var user = args.join(" ").substring(9).toLowerCase();
 							if (user == null || user == "") return;
 							
-							client.send(["Get profile", user]);
-							
-							if (client.profileRequests[user] == undefined) {
-								client.profileRequests[user] = [];
+							var callback = function() {								
+								client.send(["Get profile", user]);
+								
+								if (client.profileRequests[user] == undefined) {
+									client.profileRequests[user] = [];
+								}
+								
+								client.profileRequests[user].push(requester);
 							}
 							
-							client.profileRequests[user].push(requester);
+							if (client.accountHandler.state == DNStates.LOGGED_IN) {
+								callback();
+							} else {
+								if (client.accountHandler.state == DNStates.LOGGED_OUT) {
+									client.connect();
+								}
+								
+								client.accountHandler.onLogin(callback);
+							}
 						}
 					}
 				});
@@ -154,9 +180,15 @@ function DNUser(username, session, admins) {
 	this.allAdmins = admins;
 	
 	this.profileRequests = {};
+	this.onlineRequests = [];
+	
+	this.hasUsers = false;
+	this.hasUsersQueue = [];
 	this.onlineUsers = 0;
 	this.onlineAdmins = [];
 	this.offdutyAdmins = [];
+	
+	this.accountHandler = new AccountHandler();
 	
 	this.send = function(args) {
 		var string = args.join(",");
@@ -170,6 +202,9 @@ function DNUser(username, session, admins) {
 	}
 	
 	this.connect = function() {	
+		this.accountHandler.changeState(DNStates.LOGGING_IN);
+		this.hasUsers = false;
+		this.hasUsersQueue = [];
 		this.onlineUsers = 0;
 		this.onlineAdmins = [];
 		this.offdutyAdmins = [];
@@ -178,8 +213,9 @@ function DNUser(username, session, admins) {
 			host: "duelingnetwork.com",
 			port: "1234"
 		}, function() {
-			user.send([DN_VERSION, user.username, user.session, user.clientSession]);
+			user.send([DN_VERSION, user.username, user.session, user.clientSession, "Administrate"]);
 			user.openHeartbeat();
+			user.accountHandler.changeState(DNStates.LOGGED_IN);
 		});
 		
 		this.buffer = "";
@@ -206,7 +242,6 @@ function DNUser(username, session, admins) {
 		
 		this.client.on('close', function() {
 			clearInterval(user.heartbeat);
-			user.connect();
 		});
 	}
 	
@@ -261,12 +296,21 @@ function DNUser(username, session, admins) {
 						if (rank > 0) {
 							user.onlineAdmins.push(name);
 						} else if (user.allAdmins.indexOf(name) != -1) {
-							this.offdutyAdmins.push(name);
+							user.offdutyAdmins.push(name);
 						}
 						
-						this.onlineUsers++;
+						user.onlineUsers++;
 					}
 					
+					this.hasUsers = true;
+					this.hasUsersQueue.forEach(function(callback) {
+						callback();
+					});
+					
+					this.hasUsersQueue = [];
+					
+					this.checkRemainingRequests();
+								
 					break;
 					
 				case 'Offline users':
@@ -283,16 +327,16 @@ function DNUser(username, session, admins) {
 							user.offdutyAdmins.splice(indexOfOffline, 1);
 						}
 						
-						this.onlineUsers--;
+						user.onlineUsers--;
 					}
 					
 					break;
 					
 				case 'Get profile':
 					var profile = new UserProfile(args);
-					if (this.profileRequests[profile.username.toLowerCase()] != undefined) {
+					if (user.profileRequests[profile.username.toLowerCase()] != undefined) {
 						var msg = "";
-						this.profileRequests[profile.username.toLowerCase()].forEach(function(requester) {
+						user.profileRequests[profile.username.toLowerCase()].forEach(function(requester) {
 							msg += requester.mention() + ", ";
 						});
 						
@@ -308,7 +352,9 @@ function DNUser(username, session, admins) {
 						
 						global.bot.sendMessage(global.config.dn.channel, msg);
 						
-						delete this.profileRequests[profile.username.toLowerCase()];
+						delete user.profileRequests[profile.username.toLowerCase()];
+						
+						this.checkRemainingRequests();
 					}
 					break;
 			}
@@ -316,12 +362,29 @@ function DNUser(username, session, admins) {
 	};
 	
 	this.logout = function() {
+		this.accountHandler.state = DNStates.LOGGED_OUT;
 		clearInterval(this.heartbeat);
-		this.client.close();
+		this.client.end();
 	}
 	
-	this.connect();
+	this.checkRemainingRequests = function() {
+		if (countKeys(user.profileRequests) <= 0 && this.hasUsersQueue.length == 0) {
+			this.logout();
+		}
+	}
+	
+	this.onHasUsers = function(callback) {
+		if (this.hasUsers) {
+			callback();
+		} else this.hasUsersQueue.push(callback);
+	}
 }
+
+var DNStates = {
+	LOGGED_OUT: "LOGGED_OUT",
+	LOGGING_IN: "LOGGING_IN",
+	LOGGED_IN: "LOGGED_IN"
+};
 
 function UserProfile(data) {
 	this.username = data[1];
@@ -340,4 +403,48 @@ function UserProfile(data) {
 	this.description = data[14];
 	this.inDuel = data[15];
 	this.donator = data[16];
+}
+
+var AccountHandler = function() {
+	this.onLoggedOut = [];
+	this.onLogIn = [];
+	this.state = DNStates.LOGGED_OUT;
+	
+	this.onLogin = function(callback) {
+		this.onLogIn.push(callback);
+	}
+	
+	this.onLogout = function(callback) {
+		this.onLoggedOut.push(callback);
+	}
+	
+	this.changeState = function(state) {
+		if (this.state == state) return;
+		
+		this.state = state;
+		if (state == DNStates.LOGGED_IN) {
+			this.onLogIn.forEach(function(callback) {
+				callback();
+			});
+			
+			this.onLogIn = [];
+		} else if (state == DNStates.LOGGED_OUT) {
+			this.onLoggedOut.forEach(function(callback) {
+				callback();
+			});
+			
+			this.onLoggedOut = [];
+		}
+	}
+}
+
+function countKeys(obj) {
+	var count = 0;
+	for (k in obj) {
+		if (Object.prototype.hasOwnProperty.call(obj, k)) {
+			count++;
+		}
+	}
+	
+	return count;
 }
