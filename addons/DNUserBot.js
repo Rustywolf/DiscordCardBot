@@ -118,6 +118,9 @@ exports.onLoad = function() {
 								msg += "\n";
 								msg += "**Users Online:** " + client.onlineUsers;
 								
+								msg += "\n";
+								msg += "**Calls Waiting:** " + client.calls;
+								
 								bot.reply(message, msg);
 							}
 							
@@ -157,6 +160,47 @@ exports.onLoad = function() {
 								
 								client.accountHandler.onLogin(callback);
 							}
+						} else if (args[0] == "!history" && args.length > 1) {
+							var requester = message.author;
+							var user = args.join(" ").substring(9).toLowerCase();
+							if (user == null || user == "") return;
+							
+							var callback = function() {			
+								var sendRequest = false;
+								if (client.historyRequests.length == 0) {
+									sendRequest = true;
+								}
+								var statusRequest = client.historyRequests.find(function(request) {
+									return request.username == user;
+								});
+								
+								if (statusRequest == undefined) {
+									statusRequest = {
+										username: user,
+										requesters: [
+											requester
+										]
+									};
+									
+									client.historyRequests.push(statusRequest);
+								} else {
+									statusRequest.requesters.push(requester);
+								}
+								
+								if (sendRequest) {
+									client.send(["Ban status", user]);
+								}
+							}
+							
+							if (client.accountHandler.state == DNStates.LOGGED_IN) {
+								callback();
+							} else {
+								if (client.accountHandler.state == DNStates.LOGGED_OUT) {
+									client.connect();
+								}
+								
+								client.accountHandler.onLogin(callback);
+							}
 						}
 					}
 				});
@@ -180,13 +224,15 @@ function DNUser(username, session, admins) {
 	this.allAdmins = admins;
 	
 	this.profileRequests = {};
-	this.onlineRequests = [];
+	this.historyRequests = [];
 	
+	this.hasCalls = false;
 	this.hasUsers = false;
 	this.hasUsersQueue = [];
 	this.onlineUsers = 0;
 	this.onlineAdmins = [];
 	this.offdutyAdmins = [];
+	this.calls = 0;
 	
 	this.accountHandler = new AccountHandler();
 	
@@ -204,10 +250,12 @@ function DNUser(username, session, admins) {
 	this.connect = function() {	
 		this.accountHandler.changeState(DNStates.LOGGING_IN);
 		this.hasUsers = false;
+		this.hasCalls = false;
 		this.hasUsersQueue = [];
 		this.onlineUsers = 0;
 		this.onlineAdmins = [];
 		this.offdutyAdmins = [];
+		this.calls = 0;
 	
 		this.client = net.createConnection({
 			host: "duelingnetwork.com",
@@ -279,7 +327,7 @@ function DNUser(username, session, admins) {
 	this.handle = function(message) {
 		var args = splitArgs(message);
 		
-		if (args.length > 1) {
+		if (args.length > 0) {
 			var command = args[0];
 			
 			switch (command) {
@@ -303,13 +351,16 @@ function DNUser(username, session, admins) {
 					}
 					
 					this.hasUsers = true;
-					this.hasUsersQueue.forEach(function(callback) {
-						callback();
-					});
-					
-					this.hasUsersQueue = [];
-					
-					this.checkRemainingRequests();
+					if (this.hasCalls) {
+						this.hasUsersQueue.forEach(function(callback) {
+							callback();
+						});
+						
+						this.hasUsersQueue = [];
+						
+						
+						this.checkRemainingRequests();
+					}
 								
 					break;
 					
@@ -330,6 +381,22 @@ function DNUser(username, session, admins) {
 						user.onlineUsers--;
 					}
 					
+					break;
+					
+				case 'Add admin calls':
+					this.calls = (args.length - 1) / 3;
+					
+					this.hasCalls = true;
+					if (this.hasUsers) {
+						this.hasUsersQueue.forEach(function(callback) {
+							callback();
+						});
+						
+						this.hasUsersQueue = [];
+						
+						
+						this.checkRemainingRequests();
+					}
 					break;
 					
 				case 'Get profile':
@@ -357,6 +424,44 @@ function DNUser(username, session, admins) {
 						this.checkRemainingRequests();
 					}
 					break;
+					
+				case "Ban status":
+					var history = new UserHistory(args);
+					var current = user.historyRequests.shift();
+					if (current.username != undefined) {
+						var msg = "";
+						current.requesters.forEach(function(requester) {
+							msg += requester.mention() + ", ";
+						});
+						
+						msg = msg.substring(0, msg.length - 2);
+						msg += "\n";
+						
+						msg += "**Username:** " + current.username + "\n";
+						msg += "**Status:** " + history.status + "\n";
+						msg += "**Strikes:** " + history.strikes + "\n";
+						
+						history.messages.forEach(function(message) {
+							if (!message.truncated) {
+								msg += " • __" + message.note + "__ *by* **" + message.admin + "** - ";
+								if (message.time) {
+									msg += "**" + message.time + "** - "
+								}
+								msg += "*" + message.date + "*\n";
+							} else {
+								msg += "*Results truncated past 10 entries*\n";
+							}
+						});
+						
+						global.bot.sendMessage(global.config.dn.channel, msg);
+					}
+					
+					if (user.historyRequests.length > 0) {
+						this.send(["Ban status", user.historyRequests[0].username]);
+					}
+						
+					this.checkRemainingRequests();
+					break;
 			}
 		}
 	};
@@ -368,13 +473,13 @@ function DNUser(username, session, admins) {
 	}
 	
 	this.checkRemainingRequests = function() {
-		if (countKeys(user.profileRequests) <= 0 && this.hasUsersQueue.length == 0) {
+		if (countKeys(user.profileRequests) <= 0 && this.hasUsersQueue.length <= 0 && this.historyRequests.length <= 0) {
 			this.logout();
 		}
 	}
 	
 	this.onHasUsers = function(callback) {
-		if (this.hasUsers) {
+		if (this.hasUsers && this.hasCalls) {
 			callback();
 		} else this.hasUsersQueue.push(callback);
 	}
@@ -403,6 +508,59 @@ function UserProfile(data) {
 	this.description = data[14];
 	this.inDuel = data[15];
 	this.donator = data[16];
+}
+
+function UserHistory(data) {
+	var history = this;
+	
+	this.status = data[1];
+	this.strikes = data[2];
+	this.messages = [];
+	
+	var messagesArray = data[3].split("\n");
+	var regex = /(\|+?)(.*?)GMT/g;
+	messagesArray.every(function(message, index) {
+		if (message == "") return;
+		
+		var messageObj;
+		regex.lastIndex = 0;
+		if (!regex.test(message) || index >= 10) {
+			messageObj = {
+				truncated: true
+			}
+		} else {
+			var split = message.split(/\|+?/);
+			
+			var date = split[1].trim();
+			var time = false;
+			if (date.indexOf("\\,") != -1) {
+				var dateSplit = date.split("\\,");
+				var date = dateSplit[0].trim();
+				var time = dateSplit[1].trim();
+			}
+			
+			var noteSplitBy = (!time) ? " by " : " - ";
+			var note = split[0].trim();
+			var noteSplit = note.split(noteSplitBy);
+			var admin = noteSplit.pop().trim();
+			var note = noteSplit.join(noteSplitBy).trim();
+			
+			messageObj = {
+				note: note,
+				admin: admin,
+				date: date,
+				time: time
+			};
+		}
+		
+		history.messages.push(messageObj);
+		
+		if (messageObj.truncated) {
+			return false;
+		} else {
+			return true;
+		}
+	});
 }
 
 var AccountHandler = function() {
