@@ -40,7 +40,7 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 				var channels = config.server_limits[serverId];
 				if (channels.indexOf(channelId) == -1) {
 					if (config.debug) {
-						console.log("Receieved messge channel #" + channelId + ", ignoring...");
+						console.log("Receieved messsge channel #" + channelId + ", ignoring...");
 					}
 					return;
 				}

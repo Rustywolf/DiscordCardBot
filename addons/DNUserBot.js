@@ -172,6 +172,7 @@ function DNUser(username, session, admins) {
 	this.connect = function() {	
 		this.onlineUsers = 0;
 		this.onlineAdmins = [];
+		this.offdutyAdmins = [];
 	
 		this.client = net.createConnection({
 			host: "duelingnetwork.com",
@@ -252,6 +253,11 @@ function DNUser(username, session, admins) {
 						var name = args[i];
 						var rank = args[i+1];
 						
+						if (name == "JoeyBot") {							
+							this.onlineUsers++;
+							break;
+						}
+						
 						if (rank > 0) {
 							user.onlineAdmins.push(name);
 						} else if (user.allAdmins.indexOf(name) != -1) {
@@ -272,9 +278,9 @@ function DNUser(username, session, admins) {
 							user.onlineAdmins.splice(indexOf, 1);
 						}
 						
-						indexOf = user.offdutyAdmins.indexOf(name);
-						if (indexOf != -1) {
-							user.offdutyAdmins.splice(indexOf, 1);
+						var indexOfOffline = user.offdutyAdmins.indexOf(name);
+						if (indexOfOffline != -1) {
+							user.offdutyAdmins.splice(indexOfOffline, 1);
 						}
 						
 						this.onlineUsers--;
@@ -293,7 +299,7 @@ function DNUser(username, session, admins) {
 						msg = msg.substring(0, msg.length - 2);
 						msg += "\n";
 						msg += "**Username:** " + profile.username + "\n";
-						msg += "**Match Results:** " + profile.matchesWins + "/" + profile.matchesLoses + "/" + profile.matchesDraws + " (**Rating:** " + profile.matchesRating + ")\n";
+						msg += "**Match Results:** " + profile.matchesWins + "/" + profile.matchesLoses + " (**Rating:** " + profile.matchesRating + ")\n";
 						msg += "**Singles Results:** " + profile.singlesWins + "/" + profile.singlesLoses + "/" + profile.singlesDraws + " (**Rating:** " + profile.singlesRating + ")\n";
 						
 						var date = new Date(Date.now() - profile.dateCreated*1000);
