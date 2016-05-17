@@ -163,11 +163,17 @@ exports.onLoad = function() {
 						} else if (args[0] == "!history" && args.length > 1) {
 							var requester = message.author;
 							var user = args.join(" ").substring(9).toLowerCase();
+							
+							var waiting = client.waitingOnRequest;
+							if (!waiting) {
+								client.waitingOnRequest = true;
+							}
+							
 							if (user == null || user == "") return;
 							
 							var callback = function() {			
 								var sendRequest = false;
-								if (client.historyRequests.length == 0) {
+								if (!waiting) {
 									sendRequest = true;
 								}
 								var statusRequest = client.historyRequests.find(function(request) {
@@ -225,6 +231,7 @@ function DNUser(username, session, admins) {
 	
 	this.profileRequests = {};
 	this.historyRequests = [];
+	this.waitingOnRequest = false;
 	
 	this.hasCalls = false;
 	this.hasUsers = false;
@@ -426,6 +433,7 @@ function DNUser(username, session, admins) {
 					break;
 					
 				case "Ban status":
+				console.log("req");
 					var history = new UserHistory(args);
 					var current = user.historyRequests.shift();
 					if (current.username != undefined) {
@@ -458,6 +466,8 @@ function DNUser(username, session, admins) {
 					
 					if (user.historyRequests.length > 0) {
 						this.send(["Ban status", user.historyRequests[0].username]);
+					} else {
+						this.waitingOnRequest = false;
 					}
 						
 					this.checkRemainingRequests();
