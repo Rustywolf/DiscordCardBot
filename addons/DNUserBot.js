@@ -66,7 +66,7 @@ function parseList(body) {
 	return ret;
 }
 
-exports.onLoad = function() {
+function fetchAdminList(callback) {
 	var adminOptions = url.parse(global.config.dn.admins);
 	adminOptions.port = 80;
 	
@@ -78,141 +78,153 @@ exports.onLoad = function() {
 		res.on('data', function(chunk) {
 			body += chunk;
 		}).on('end', function() {
-			var admins = parseList(body).split("\n");
-			
-			login(global.config.dn.username, global.config.dn.password, function(body) {
-				var response = body.split(",");
-				var client = new DNUser(response[1], response[2], admins);
-				console.log("Connected to DN");
-				
-				global.bot.on("message", function(message) {
-					if (message.channel.id == global.config.dn.channel) {
-						if (message.content == null || message.content == "") return;
-						var args = message.content.split(" ");
-						
-						if (args[0] == "!online") {
-							var callback = function() {
-								var msg = "\n**Admins Online:** " + client.onlineAdmins.length;
-								if (client.onlineAdmins.length > 0) {
-									msg += " (";
-									client.onlineAdmins.forEach(function(admin) {
-										msg += admin + ", ";
-									});
-									
-									msg = msg.substring(0, msg.length - 2);
-									msg += ")";
-								}
-								
-								msg += "\n";
-								msg += "**Admins Offduty:** " + client.offdutyAdmins.length;
-								if (client.offdutyAdmins.length > 0) {
-									msg += " (";
-									client.offdutyAdmins.forEach(function(admin) {
-										msg += admin + ", ";
-									});
-									
-									msg = msg.substring(0, msg.length - 2);
-									msg += ")";
-								}
-								
-								msg += "\n";
-								msg += "**Users Online:** " + client.onlineUsers;
-								
-								msg += "\n";
-								msg += "**Calls Waiting:** " + client.calls;
-								
-								bot.reply(message, msg);
-							}
-							
-							if (client.accountHandler.state == DNStates.LOGGED_IN) {
-								client.onHasUsers(callback);
-							} else {
-								if (client.accountHandler.state == DNStates.LOGGED_OUT) {
-									client.connect();
-								}
-								
-								client.accountHandler.onLogin(function() {
-									client.onHasUsers(callback);
-								});
-							}
-							
-						} else if (args[0] == "!profile" && args.length > 1) {
-							var requester = message.author;
-							var user = args.join(" ").substring(9).toLowerCase();
-							if (user == null || user == "") return;
-							
-							var callback = function() {								
-								client.send(["Get profile", user]);
-								
-								if (client.profileRequests[user] == undefined) {
-									client.profileRequests[user] = [];
-								}
-								
-								client.profileRequests[user].push(requester);
-							}
-							
-							if (client.accountHandler.state == DNStates.LOGGED_IN) {
-								callback();
-							} else {
-								if (client.accountHandler.state == DNStates.LOGGED_OUT) {
-									client.connect();
-								}
-								
-								client.accountHandler.onLogin(callback);
-							}
-						} else if (args[0] == "!history" && args.length > 1) {
-							var requester = message.author;
-							var user = args.join(" ").substring(9).toLowerCase();
-							
-							var waiting = client.waitingOnRequest;
-							if (!waiting) {
-								client.waitingOnRequest = true;
-							}
-							
-							if (user == null || user == "") return;
-							
-							var callback = function() {			
-								var sendRequest = false;
-								if (!waiting) {
-									sendRequest = true;
-								}
-								var statusRequest = client.historyRequests.find(function(request) {
-									return request.username == user;
-								});
-								
-								if (statusRequest == undefined) {
-									statusRequest = {
-										username: user,
-										requesters: [
-											requester
-										]
-									};
-									
-									client.historyRequests.push(statusRequest);
-								} else {
-									statusRequest.requesters.push(requester);
-								}
-								
-								if (sendRequest) {
-									client.send(["Ban status", user]);
-								}
-							}
-							
-							if (client.accountHandler.state == DNStates.LOGGED_IN) {
-								callback();
-							} else {
-								if (client.accountHandler.state == DNStates.LOGGED_OUT) {
-									client.connect();
-								}
-								
-								client.accountHandler.onLogin(callback);
-							}
-						}
-					}
-				});
-			});
+			callback(parseList(body).split("\n"));
 		}).on('error', function (err) {
 			console.log("Error: " + err.message);
+		});
+	});
+}
+
+exports.onLoad = function() {
+	fetchAdminList(function(admins) {
+		
+		login(global.config.dn.username, global.config.dn.password, function(body) {
+			var response = body.split(",");
+			var client = new DNUser(response[1], response[2], admins);
+			console.log("Connected to DN");
+			
+			setInterval(function() {
+				fetchAdminList(function(admins) {
+					client.allAdmins = admins;
+					console.log("Updated admin list!");
+				});
+			}, 1000*60*60*6);
+			
+			global.bot.on("message", function(message) {
+				if (message.channel.id == global.config.dn.channel) {
+					if (message.content == null || message.content == "") return;
+					var args = message.content.split(" ");
+					
+					if (args[0] == "!online") {
+						var callback = function() {
+							var msg = "\n**Admins Online:** " + client.onlineAdmins.length;
+							if (client.onlineAdmins.length > 0) {
+								msg += " (";
+								client.onlineAdmins.forEach(function(admin) {
+									msg += admin + ", ";
+								});
+								
+								msg = msg.substring(0, msg.length - 2);
+								msg += ")";
+							}
+							
+							msg += "\n";
+							msg += "**Admins Offduty:** " + client.offdutyAdmins.length;
+							if (client.offdutyAdmins.length > 0) {
+								msg += " (";
+								client.offdutyAdmins.forEach(function(admin) {
+									msg += admin + ", ";
+								});
+								
+								msg = msg.substring(0, msg.length - 2);
+								msg += ")";
+							}
+							
+							msg += "\n";
+							msg += "**Users Online:** " + client.onlineUsers;
+							
+							msg += "\n";
+							msg += "**Calls Waiting:** " + client.calls;
+							
+							bot.reply(message, msg);
+						}
+						
+						if (client.accountHandler.state == DNStates.LOGGED_IN) {
+							client.onHasUsers(callback);
+						} else {
+							if (client.accountHandler.state == DNStates.LOGGED_OUT) {
+								client.connect();
+							}
+							
+							client.accountHandler.onLogin(function() {
+								client.onHasUsers(callback);
+							});
+						}
+						
+					} else if (args[0] == "!profile" && args.length > 1) {
+						var requester = message.author;
+						var user = args.join(" ").substring(9).toLowerCase();
+						if (user == null || user == "") return;
+						
+						var callback = function() {								
+							client.send(["Get profile", user]);
+							
+							if (client.profileRequests[user] == undefined) {
+								client.profileRequests[user] = [];
+							}
+							
+							client.profileRequests[user].push(requester);
+						}
+						
+						if (client.accountHandler.state == DNStates.LOGGED_IN) {
+							callback();
+						} else {
+							if (client.accountHandler.state == DNStates.LOGGED_OUT) {
+								client.connect();
+							}
+							
+							client.accountHandler.onLogin(callback);
+						}
+					} else if (args[0] == "!history" && args.length > 1) {
+						var requester = message.author;
+						var user = args.join(" ").substring(9).toLowerCase();
+						
+						var waiting = client.waitingOnRequest;
+						if (!waiting) {
+							client.waitingOnRequest = true;
+						}
+						
+						if (user == null || user == "") return;
+						
+						var callback = function() {			
+							var sendRequest = false;
+							if (!waiting) {
+								sendRequest = true;
+							}
+							var statusRequest = client.historyRequests.find(function(request) {
+								return request.username == user;
+							});
+							
+							if (statusRequest == undefined) {
+								statusRequest = {
+									username: user,
+									requesters: [
+										requester
+									]
+								};
+								
+								client.historyRequests.push(statusRequest);
+							} else {
+								statusRequest.requesters.push(requester);
+							}
+							
+							if (sendRequest) {
+								client.send(["Ban status", user]);
+							}
+						}
+						
+						if (client.accountHandler.state == DNStates.LOGGED_IN) {
+							callback();
+						} else {
+							if (client.accountHandler.state == DNStates.LOGGED_OUT) {
+								client.connect();
+							}
+							
+							client.accountHandler.onLogin(callback);
+						}
+					}
+				}
+			});
 		});
 	});
 }
