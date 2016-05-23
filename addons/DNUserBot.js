@@ -445,7 +445,6 @@ function DNUser(username, session, admins) {
 					break;
 					
 				case "Ban status":
-				console.log("req");
 					var history = new UserHistory(args);
 					var current = user.historyRequests.shift();
 					if (current.username != undefined) {
@@ -463,11 +462,15 @@ function DNUser(username, session, admins) {
 						
 						history.messages.forEach(function(message) {
 							if (!message.truncated) {
-								msg += " • __" + message.note + "__ *by* **" + message.admin + "** - ";
-								if (message.time) {
-									msg += "**" + message.time + "** - "
+								if (message.blacklisted) {
+									msg += " • __Blacklisted IP/Computer__ *by* **System**\n";
+								} else {
+									msg += " • __" + message.note + "__ *by* **" + message.admin + "** - ";
+									if (message.time) {
+										msg += "**" + message.time + "** - "
+									}
+									msg += "*" + message.date + "*\n";
 								}
-								msg += "*" + message.date + "*\n";
 							} else {
 								msg += "*Results truncated past 10 entries*\n";
 							}
@@ -546,33 +549,39 @@ function UserHistory(data) {
 		
 		var messageObj;
 		regex.lastIndex = 0;
-		if (!regex.test(message) || index >= 10) {
+		if ((!regex.test(message) && message !== "Blacklisted IP/Computer") || index >= 10) {
 			messageObj = {
 				truncated: true
 			}
 		} else {
-			var split = message.split(/\|+?/);
-			
-			var date = split[1].trim();
-			var time = false;
-			if (date.indexOf("\\,") != -1) {
-				var dateSplit = date.split("\\,");
-				var date = dateSplit[0].trim();
-				var time = dateSplit[1].trim();
+			if (message === "Blacklisted IP/Computer") {
+				messageObj = {
+					blacklisted: true
+				}
+			} else {
+				var split = message.split(/\|+?/);
+				
+				var date = split[1].trim();
+				var time = false;
+				if (date.indexOf("\\,") != -1) {
+					var dateSplit = date.split("\\,");
+					var date = dateSplit[0].trim();
+					var time = dateSplit[1].trim();
+				}
+				
+				var noteSplitBy = (!time) ? " by " : " - ";
+				var note = split[0].trim();
+				var noteSplit = note.split(noteSplitBy);
+				var admin = noteSplit.pop().trim();
+				var note = noteSplit.join(noteSplitBy).trim();
+				
+				messageObj = {
+					note: note,
+					admin: admin,
+					date: date,
+					time: time
+				};
 			}
-			
-			var noteSplitBy = (!time) ? " by " : " - ";
-			var note = split[0].trim();
-			var noteSplit = note.split(noteSplitBy);
-			var admin = noteSplit.pop().trim();
-			var note = noteSplit.join(noteSplitBy).trim();
-			
-			messageObj = {
-				note: note,
-				admin: admin,
-				date: date,
-				time: time
-			};
 		}
 		
 		history.messages.push(messageObj);
