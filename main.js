@@ -27,10 +27,12 @@ fs.readFile("./config.json", "utf8", function(err, data) {
 	});
 
 	bot.on("message", function(message) {
-		if (bot.user.id === message.author.id) {
-			return;
+		if (message.author) {
+			if (bot.user.id === message.author.id) {
+				return;
+			}
 		}
-		
+	
 		if (!config.allow_pm && !message.channel.server) {
 			if (config.debug) {
 				console.log("Received PM, ignoring...");
